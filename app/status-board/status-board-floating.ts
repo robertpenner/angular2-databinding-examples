@@ -35,8 +35,6 @@ var requestAnimationFrame = window.requestAnimationFrame || window['mozRequestAn
 export class StatusBoardFloating {
 	statusBoard: Position[][] = [];
 
-	private _lastStep: number = 0;
-
 	private _config: IPositionConfig = {
 		velocity: {
 			x: { min: 0, max: 100 },
@@ -51,39 +49,38 @@ export class StatusBoardFloating {
 	constructor() {
 		this.initStatusBoard();
 
-		requestAnimationFrame(this.updateBoard.bind(this));
+		requestAnimationFrame(this.updateBoard);
 	}
 
 	initStatusBoard() {
-		for (var row = 0; row < dimensions.rows; row++) {
-			for (var col = 0; col < dimensions.cols; col++) {
-				if (!this.statusBoard[row]) {
-					this.statusBoard[row] = [];
-				}
-
-				this.statusBoard[row][col] = Position.create(this._config);
+		for (let row = 0; row < dimensions.rows; row++) {
+			let rowData = this.statusBoard[row] = [];
+			for (let col = 0; col < dimensions.cols; col++) {
+				rowData[col] = Position.create(this._config);
 			}
 		}
 	}
 
-	updateBoard(elapsedMilliseconds) {
-		var elapsedSeconds = new TimeSpan(elapsedMilliseconds - this._lastStep).totalSeconds;
-		this._lastStep = elapsedMilliseconds;
+	// Use arrow function to lock the scope.
+	updateBoard = (now: number, lastTime = 0) => {
+		const elapsedSeconds = new TimeSpan(lastTime, now).totalSeconds;
+		const bounds = this._config.bounds;
 
-		for (var row = 0; row < dimensions.rows; row++) {
-			for (var col = 0; col < dimensions.cols; col++) {
-				this.statusBoard[row][col].move(elapsedSeconds, this._config.bounds);
+		for (let row = 0; row < dimensions.rows; row++) {
+			for (let col = 0; col < dimensions.cols; col++) {
+				this.statusBoard[row][col].move(elapsedSeconds, bounds);
 			}
 		}
 
-		requestAnimationFrame(this.updateBoard.bind(this));
-	}
+		// Pass current timestamp to next update using a closure (no need to store in a property).
+		requestAnimationFrame(nextTime => this.updateBoard(nextTime, now));
+	};
 }
 
 class Position {
-	top:string;
-	left:string;
-	
+	top: string;
+	left: string;
+
 	constructor(
 		public x: number,
 		public y: number,
@@ -93,14 +90,14 @@ class Position {
 	move(timeDelta: number, bounds?:IBounds) {
 		this.x += (this.velocityX * timeDelta);
 		this.y += (this.velocityY * timeDelta);
-		
+
 		this.top = `${this.y}px`;
 		this.left = `${this.x}px`;
-		
+
 		if(!bounds) return;
-		
+
 		if(this.x > bounds.x.max || this.x < bounds.x.min){
-			this.x = this.x > bounds.x.max ? bounds.x.max : bounds.x.min; 
+			this.x = this.x > bounds.x.max ? bounds.x.max : bounds.x.min;
 			this.velocityX *= -1;
 		}
 		if(this.y > bounds.y.max || this.y < bounds.y.min){
@@ -108,7 +105,7 @@ class Position {
 			this.velocityY *= -1;
 		}
 	}
-	
+
 	static create(config:IPositionConfig){
 		return new Position(
 			getRandomInt(config.bounds.x.min, config.bounds.x.max),
@@ -124,7 +121,11 @@ function getRandomInt(min: number, max: number): number {
 }
 
 class TimeSpan {
-	constructor(private _totalMilliseconds: number = 0) { }
+	private _totalMilliseconds: number;
+
+	constructor(beginMilliseconds: number, endMilliseconds: number) {
+		this._totalMilliseconds = endMilliseconds - beginMilliseconds;
+	}
 
 	get totalSeconds() {
 		return this._totalMilliseconds / 1000;
